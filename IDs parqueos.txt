@@ -1,0 +1,41 @@
+"parking_lot_id": 8
+"name": "Costado B10 Ruta 32"
+
+"parking_lot_id": 3
+"name": "Multiplaza (entrada Starbucks/BCR)"
+
+"parking_lot_id": 5
+"name": "B10 - ATP 1-3"
+
+"parking_lot_id": 4
+"name": "B10 - ATP 4-10"
+
+"parking_lot_id": 7
+"name": "B10 - BDP"
+
+"parking_lot_id": 2
+"name": "B10 - Piso 1"
+
+"parking_lot_id": 10
+"name": "B10 - Piso 2"
+
+"parking_lot_id": 9
+"name": "B10 - Piso 4"
+
+"parking_lot_id": 6
+"name": "Calle Blancos (Moto)"
+
+"parking_lot_id": 12
+"name": "Costado B10, ruta 32 (MOTO)"
+
+"parking_lot_id": 1
+"name": "Plaza Roble"
+
+"parking_lot_id": 46
+"name": "Prueba"
+
+"parking_lot_id": 80
+"name": "RCC Roble"
+
+"parking_lot_id": 113
+"name": "Torre La Tostadora"
