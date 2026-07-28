@@ -2,8 +2,8 @@ name: Reservar parqueo
 
 on:
   schedule:
-    # 12:05 UTC = 6:05am hora de Costa Rica (UTC-6, sin horario de verano)
-    - cron: "5 12 * * *"
+    # 11:55 UTC = 5:55am hora de Costa Rica (UTC-6, sin horario de verano)
+    - cron: "55 11 * * *"
   workflow_dispatch: {}  # permite correrlo manualmente desde la pestaña "Actions" para probar
 
 jobs:
