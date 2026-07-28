@@ -34,7 +34,7 @@ RESERVE_URL = f"{BASE_URL}/parking_reservations/multiples"
 
 # Días de la semana en los que querés reservar (0=lunes ... 6=domingo)
 # 3 = jueves, 4 = viernes
-DIAS_DESEADOS = {3, 4}
+DIAS_DESEADOS = {1, 3, 4}
 
 # Datos específicos de tu cuenta/vehículo/lote.
 # Si alguno cambia (cambiaste de carro, de lote, etc.) actualizalos acá.
