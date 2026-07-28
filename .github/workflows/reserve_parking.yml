@@ -1,0 +1,36 @@
+name: Reservar parqueo
+
+on:
+  schedule:
+    # 12:05 UTC = 6:05am hora de Costa Rica (UTC-6, sin horario de verano)
+    - cron: "5 12 * * *"
+  workflow_dispatch: {}  # permite correrlo manualmente desde la pestaña "Actions" para probar
+
+jobs:
+  reservar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clonar el repo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: Correr el script de reserva
+        env:
+          CORP_EMAIL: ${{ secrets.CORP_EMAIL }}
+          CORP_PASSWORD: ${{ secrets.CORP_PASSWORD }}
+        run: python reserve_parking.py
+
+      - name: Subir el log como artefacto (por si algo falla)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reserve-parking-log
+          path: reserve_parking.log
+          retention-days: 14
