@@ -39,7 +39,7 @@ AVAILABILITY_URL = f"{BASE_URL}/parking_spaces/availability"
 
 # Dias de la semana en los que queres reservar (0=lunes ... 6=domingo)
 # 3 = jueves, 4 = viernes
-DIAS_DESEADOS = {3, 4}
+DIAS_DESEADOS = {1, 2, 3, 4}
 
 # Parking lots preferidos, EN ORDEN DE PRIORIDAD. El script prueba el
 # primero; si no tiene cupo, prueba el siguiente, y asi sucesivamente.
