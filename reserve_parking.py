@@ -44,7 +44,7 @@ REASON = "Jornada Laboral"
 HORA_ENTRADA = "08:00:00"  # hora de entrada que se manda en cada reserva
 
 # Días de anticipación con los que se habilita cada reserva
-DIAS_ANTICIPACION = 7
+DIAS_ANTICIPACION = 5
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
 
