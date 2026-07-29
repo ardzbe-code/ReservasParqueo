@@ -39,7 +39,7 @@ AVAILABILITY_URL = f"{BASE_URL}/parking_spaces/availability"
 
 # Dias de la semana en los que queres reservar (0=lunes ... 6=domingo)
 # 3 = jueves, 4 = viernes
-DIAS_DESEADOS = {3, 4, 5, 6}
+DIAS_DESEADOS = {3, 4}
 
 # Parking lots preferidos, EN ORDEN DE PRIORIDAD. El script prueba el
 # primero; si no tiene cupo, prueba el siguiente, y asi sucesivamente.
@@ -51,7 +51,7 @@ HORA_ENTRADA = "08:00:00"       # hora de entrada que se manda en la reserva
 HORA_ENTRADA_CORTA = "08:00"    # mismo valor pero formato HH:MM para el chequeo de disponibilidad
 
 # Dias de anticipacion con los que se habilita cada reserva
-DIAS_ANTICIPACION = 3
+DIAS_ANTICIPACION = 7
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
 
