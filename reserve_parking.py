@@ -51,7 +51,7 @@ HORA_ENTRADA = "08:00:00"       # hora de entrada que se manda en la reserva
 HORA_ENTRADA_CORTA = "08:00"    # mismo valor pero formato HH:MM para el chequeo de disponibilidad
 
 # Dias de anticipacion con los que se habilita cada reserva
-DIAS_ANTICIPACION = 7
+DIAS_ANTICIPACION = 3
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
 
