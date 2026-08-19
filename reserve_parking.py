@@ -65,7 +65,7 @@ HORA_ENTRADA_CORTA = "08:00"    # mismo valor pero formato HH:MM
 DIAS_ANTICIPACION = 7
 
 # --- Configuracion de reintentos ---
-MINUTOS_MAX_REINTENTO = 1
+MINUTOS_MAX_REINTENTO = 2
 SEGUNDOS_ENTRE_INTENTOS = 30   # espera cuando NO hay cupo en ningun lot
 SEGUNDOS_ESPERA_CONFIRMACION = 60  # espera despues del POST antes de verificar
 
