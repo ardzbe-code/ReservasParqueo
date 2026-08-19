@@ -67,7 +67,7 @@ DIAS_ANTICIPACION = 7
 # --- Configuracion de reintentos ---
 MINUTOS_MAX_REINTENTO = 1
 SEGUNDOS_ENTRE_INTENTOS = 30   # espera cuando NO hay cupo en ningun lot
-SEGUNDOS_ESPERA_CONFIRMACION = 5  # espera despues del POST antes de verificar
+SEGUNDOS_ESPERA_CONFIRMACION = 60  # espera despues del POST antes de verificar
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
 
