@@ -5,24 +5,35 @@ Automatiza la reserva de parqueo en Corporate Experience.
 Logica:
 - Las reservas se habilitan cada dia a las 6am, un dia a la vez, para la
   fecha que cae exactamente 7 dias despues.
-- Este script esta pensado para correr TODOS los dias a las 6:05am (via
-  GitHub Actions / cron / Task Scheduler). Cada vez que corre, calcula
-  la fecha que se acaba de habilitar (hoy + 7 dias) y, SOLO SI esa
-  fecha es jueves o viernes:
-    1. Hace login.
-    2. Consulta disponibilidad real de espacios para esa fecha.
-    3. Prueba, EN ORDEN DE PRIORIDAD, los parking lots preferidos y
-       reserva en el primero que tenga cupo disponible.
-- Si la fecha habilitada no es jueves/viernes, o si ninguno de los
-  parking lots preferidos tiene cupo, no reserva nada (y lo deja
-  registrado en el log).
+- Este script arranca a las 5:55am (disparado por cron-job.org via la
+  API de GitHub) y REINTENTA cada cierto tiempo hasta las 6:05am (10
+  minutos de ventana).
+- Cada intento:
+    1. Verifica si YA existe una reserva APROBADA para la fecha
+       objetivo (chequeando /api/reservations). Si ya existe, termina
+       exitosamente sin hacer nada mas.
+    2. Si no existe, consulta disponibilidad real y elige, en orden de
+       prioridad, el primer parking lot preferido que tenga cupo.
+    3. Hace el POST de la reserva. OJO: la API a veces responde
+       success:true aunque el cupo ya lo haya tomado otro usuario
+       (race condition) - por eso, despues del POST, se vuelve a
+       consultar /api/reservations para CONFIRMAR que la reserva
+       realmente quedo creada para esa fecha. Si no se confirma, se
+       trata como fallo y se reintenta.
+- Sigue reintentando hasta que:
+    a) se confirme una reserva real, o
+    b) ya no quede cupo en NINGUN parking lot preferido, o
+    c) se acabe la ventana de tiempo de reintentos.
+- Si la fecha que se habilita (hoy + 7 dias) no es jueves/viernes, no
+  hace nada.
 
 Credenciales: se leen de variables de entorno (nunca quedan en este
-archivo). Ver .env.example / Secrets de GitHub Actions.
+archivo). Ver README.md / Secrets de GitHub Actions.
 """
 
 import os
 import sys
+import time
 import logging
 from datetime import datetime, timedelta
 
@@ -36,22 +47,27 @@ BASE_URL = "https://baclatam.corporateparking.parso.cr/api"
 LOGIN_URL = f"{BASE_URL}/auth/sign_in"
 RESERVE_URL = f"{BASE_URL}/parking_reservations/multiples"
 AVAILABILITY_URL = f"{BASE_URL}/parking_spaces/availability"
+RESERVATIONS_URL = f"{BASE_URL}/reservations"
 
 # Dias de la semana en los que queres reservar (0=lunes ... 6=domingo)
 # 3 = jueves, 4 = viernes
 DIAS_DESEADOS = {3, 4}
 
-# Parking lots preferidos, EN ORDEN DE PRIORIDAD. El script prueba el
-# primero; si no tiene cupo, prueba el siguiente, y asi sucesivamente.
+# Parking lots preferidos, EN ORDEN DE PRIORIDAD.
 PRIORITY_LOT_IDS = [2, 10, 9]
 
 VEHICLE_ID = 16597
 REASON = "Jornada Laboral"
 HORA_ENTRADA = "08:00:00"       # hora de entrada que se manda en la reserva
-HORA_ENTRADA_CORTA = "08:00"    # mismo valor pero formato HH:MM para el chequeo de disponibilidad
+HORA_ENTRADA_CORTA = "08:00"    # mismo valor pero formato HH:MM
 
 # Dias de anticipacion con los que se habilita cada reserva
 DIAS_ANTICIPACION = 7
+
+# --- Configuracion de reintentos ---
+MINUTOS_MAX_REINTENTO = 10
+SEGUNDOS_ENTRE_INTENTOS = 15   # espera cuando NO hay cupo en ningun lot
+SEGUNDOS_ESPERA_CONFIRMACION = 5  # espera despues del POST antes de verificar
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
 
@@ -71,8 +87,6 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 def login():
-    """Hace login y devuelve los headers de autenticacion (access-token,
-    client, uid) que hay que reenviar en las siguientes peticiones."""
     email = os.environ.get("CORP_EMAIL")
     password = os.environ.get("CORP_PASSWORD")
 
@@ -83,19 +97,27 @@ def login():
     resp = requests.post(LOGIN_URL, json={"email": email, "password": password})
     resp.raise_for_status()
 
-    auth_headers = {
-        "access-token": resp.headers["access-token"],
-        "client": resp.headers["client"],
-        "uid": resp.headers["uid"],
-        "token-type": resp.headers.get("token-type", "Bearer"),
-    }
+    auth_headers = extraer_tokens(resp)
     log.info("Login exitoso.")
     return auth_headers
 
 
+def extraer_tokens(resp):
+    return {
+        "access-token": resp.headers.get("access-token"),
+        "client": resp.headers.get("client"),
+        "uid": resp.headers.get("uid"),
+        "token-type": resp.headers.get("token-type", "Bearer"),
+    }
+
+
+def actualizar_tokens(auth_headers, resp):
+    nuevos = extraer_tokens(resp)
+    if nuevos["access-token"] and nuevos["client"] and nuevos["uid"]:
+        auth_headers.update(nuevos)
+
+
 def consultar_disponibilidad(auth_headers, fecha):
-    """Consulta disponibilidad real para la fecha dada y devuelve una lista
-    de dicts {parking_lot_id, name, total} para esa fecha."""
     fecha_str = fecha.strftime("%Y-%m-%d")
     fecha_iso = f"{fecha_str}T00:00:00.000Z"
 
@@ -107,27 +129,23 @@ def consultar_disponibilidad(auth_headers, fecha):
 
     resp = requests.get(AVAILABILITY_URL, params=params, headers=auth_headers)
     resp.raise_for_status()
+    actualizar_tokens(auth_headers, resp)
     data = resp.json()
 
     if not data.get("success") or not data.get("availables"):
         log.warning(f"Respuesta de disponibilidad inesperada: {data}")
         return []
 
-    # La respuesta viene como una lista con un elemento por fecha consultada.
     dia = data["availables"][0]
     return dia.get("availability", [])
 
 
 def elegir_lot_disponible(disponibilidad):
-    """Recorre PRIORITY_LOT_IDS en orden y devuelve el primer
-    parking_lot_id que tenga cupo (total > 0). Devuelve None si ninguno
-    tiene cupo."""
     disponibilidad_por_id = {d["parking_lot_id"]: d for d in disponibilidad}
 
     for lot_id in PRIORITY_LOT_IDS:
         info = disponibilidad_por_id.get(lot_id)
         if info is None:
-            log.warning(f"Parking lot {lot_id} no aparece en la respuesta de disponibilidad.")
             continue
         if info.get("total", 0) > 0:
             log.info(f"Cupo disponible en lot {lot_id} ({info.get('name')}): {info['total']} espacios.")
@@ -138,8 +156,37 @@ def elegir_lot_disponible(disponibilidad):
     return None
 
 
+def buscar_reserva_confirmada(auth_headers, fecha):
+    """Consulta /api/reservations y busca una reserva APROBADA cuyo
+    entry_time caiga en la fecha objetivo, para el vehiculo configurado.
+    Devuelve el dict de la reserva si la encuentra, o None."""
+    fecha_str = fecha.strftime("%Y-%m-%d")
+
+    resp = requests.get(RESERVATIONS_URL, headers=auth_headers)
+    resp.raise_for_status()
+    actualizar_tokens(auth_headers, resp)
+    data = resp.json()
+
+    if not data.get("success"):
+        log.warning(f"Respuesta de /reservations inesperada: {data}")
+        return None
+
+    for reserva in data.get("reservations", []):
+        entry_time = reserva.get("entry_time", "")
+        entry_fecha = entry_time[:10]  # "YYYY-MM-DD"
+        vehicle_id = reserva.get("vehicle", {}).get("id")
+        estado = reserva.get("status")
+
+        if entry_fecha == fecha_str and vehicle_id == VEHICLE_ID and estado == "APPROVED":
+            return reserva
+
+    return None
+
+
 def reservar(auth_headers, fecha, parking_lot_id):
-    """Reserva el parqueo para la fecha dada en el parking_lot_id indicado."""
+    """Envia el POST de reserva. Devuelve True/False segun el status
+    HTTP, pero OJO: un True aqui NO garantiza que el cupo haya quedado
+    realmente asignado (ver buscar_reserva_confirmada)."""
     fecha_str = fecha.strftime("%Y-%m-%d")
     entry_time = f"{fecha_str}T{HORA_ENTRADA}.000"
 
@@ -154,15 +201,94 @@ def reservar(auth_headers, fecha, parking_lot_id):
     }
 
     resp = requests.post(RESERVE_URL, json=payload, headers=auth_headers)
+    actualizar_tokens(auth_headers, resp)
 
     if resp.ok:
-        log.info(f"Reserva exitosa para {fecha_str} en lot {parking_lot_id}. Respuesta: {resp.text}")
+        log.info(f"POST de reserva respondio OK para lot {parking_lot_id}. Respuesta: {resp.text}")
+        return True
     else:
-        log.error(
-            f"Fallo la reserva para {fecha_str} en lot {parking_lot_id}. "
+        log.warning(
+            f"POST de reserva fallo (HTTP) para lot {parking_lot_id}. "
             f"Status: {resp.status_code}. Respuesta: {resp.text}"
         )
-        resp.raise_for_status()
+        return False
+
+
+def intentar_reservar_con_reintentos(auth_headers, fecha_objetivo):
+    inicio = datetime.now()
+    limite = inicio + timedelta(minutes=MINUTOS_MAX_REINTENTO)
+    intento = 0
+
+    while datetime.now() < limite:
+        intento += 1
+        log.info(f"--- Intento #{intento} ---")
+
+        # 0. Por si ya quedo reservado en un intento anterior (o por otra via)
+        try:
+            ya_reservado = buscar_reserva_confirmada(auth_headers, fecha_objetivo)
+        except requests.RequestException as e:
+            log.warning(f"Error consultando /reservations: {e}")
+            ya_reservado = None
+
+        if ya_reservado:
+            espacio = ya_reservado.get("parking_space", {}).get("parking_space_label")
+            lot_nombre = ya_reservado.get("parking_lot", {}).get("name")
+            log.info(
+                f"Reserva CONFIRMADA para {fecha_objetivo}: lot '{lot_nombre}', "
+                f"espacio '{espacio}' (id reserva {ya_reservado.get('id')})."
+            )
+            return True
+
+        # 1. Ver disponibilidad y elegir lot
+        try:
+            disponibilidad = consultar_disponibilidad(auth_headers, fecha_objetivo)
+        except requests.RequestException as e:
+            log.warning(f"Error consultando disponibilidad: {e}")
+            disponibilidad = []
+
+        lot_elegido = elegir_lot_disponible(disponibilidad) if disponibilidad else None
+
+        if lot_elegido is None:
+            log.info("Sin cupo en ningun lot preferido por ahora. Reintentando...")
+            time.sleep(SEGUNDOS_ENTRE_INTENTOS)
+            continue
+
+        # 2. Intentar reservar
+        try:
+            reservar(auth_headers, fecha_objetivo, lot_elegido)
+        except requests.RequestException as e:
+            log.warning(f"Error en el POST de reserva: {e}")
+            time.sleep(SEGUNDOS_ENTRE_INTENTOS)
+            continue
+
+        # 3. Esperar un poco y CONFIRMAR contra /reservations (el POST
+        #    puede decir success aunque el cupo ya lo tomo otro).
+        time.sleep(SEGUNDOS_ESPERA_CONFIRMACION)
+
+        try:
+            confirmada = buscar_reserva_confirmada(auth_headers, fecha_objetivo)
+        except requests.RequestException as e:
+            log.warning(f"Error confirmando la reserva: {e}")
+            confirmada = None
+
+        if confirmada:
+            espacio = confirmada.get("parking_space", {}).get("parking_space_label")
+            lot_nombre = confirmada.get("parking_lot", {}).get("name")
+            log.info(
+                f"Reserva CONFIRMADA para {fecha_objetivo}: lot '{lot_nombre}', "
+                f"espacio '{espacio}' (id reserva {confirmada.get('id')})."
+            )
+            return True
+        else:
+            log.warning(
+                f"El POST respondio success pero NO se confirmo la reserva "
+                f"en lot {lot_elegido} (probablemente el cupo lo tomo otro "
+                f"usuario primero). Reintentando..."
+            )
+            # No dormimos de mas aqui: ya esperamos SEGUNDOS_ESPERA_CONFIRMACION.
+            # Volvemos directo a chequear disponibilidad fresca.
+
+    return False
 
 
 def main():
@@ -178,24 +304,20 @@ def main():
         )
         return
 
-    log.info(f"La fecha {fecha_objetivo} SI es un dia deseado. Verificando disponibilidad...")
+    log.info(
+        f"La fecha {fecha_objetivo} SI es un dia deseado. "
+        f"Reintentando hasta por {MINUTOS_MAX_REINTENTO} minutos..."
+    )
     auth_headers = login()
 
-    disponibilidad = consultar_disponibilidad(auth_headers, fecha_objetivo)
-    if not disponibilidad:
-        log.error("No se pudo obtener informacion de disponibilidad. No se reserva nada.")
-        return
+    exito = intentar_reservar_con_reintentos(auth_headers, fecha_objetivo)
 
-    lot_elegido = elegir_lot_disponible(disponibilidad)
-
-    if lot_elegido is None:
-        log.warning(
-            f"Ninguno de los parking lots preferidos {PRIORITY_LOT_IDS} "
-            f"tiene cupo para {fecha_objetivo}. No se reserva nada."
+    if not exito:
+        log.error(
+            f"No se logro CONFIRMAR una reserva para {fecha_objetivo} en "
+            f"ninguno de los lots preferidos {PRIORITY_LOT_IDS} dentro de "
+            f"la ventana de {MINUTOS_MAX_REINTENTO} minutos."
         )
-        return
-
-    reservar(auth_headers, fecha_objetivo, lot_elegido)
 
 
 if __name__ == "__main__":
