@@ -66,8 +66,8 @@ DIAS_ANTICIPACION = 7
 
 # --- Configuracion de reintentos ---
 MINUTOS_MAX_REINTENTO = 2
-SEGUNDOS_ENTRE_INTENTOS = 30   # espera cuando NO hay cupo en ningun lot
-SEGUNDOS_ESPERA_CONFIRMACION = 60  # espera despues del POST antes de verificar
+SEGUNDOS_ENTRE_INTENTOS = 15   # espera cuando NO hay cupo en ningun lot
+SEGUNDOS_ESPERA_CONFIRMACION = 30  # espera despues del POST antes de verificar
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
 
@@ -157,8 +157,15 @@ def elegir_lot_disponible(disponibilidad):
 
 
 def buscar_reserva_confirmada(auth_headers, fecha):
-    """Consulta /api/reservations y busca una reserva APROBADA cuyo
-    entry_time caiga en la fecha objetivo, para el vehiculo configurado.
+    """Consulta /api/reservations y busca una reserva APROBADA cuya
+    reservation_date sea la fecha objetivo, para el vehiculo configurado.
+
+    OJO: en las respuestas de esta API, "reservation_date" es la fecha
+    real de uso del parqueo (la fecha objetivo), mientras que
+    "entry_time" refleja el dia en que se creo la reserva (hoy) - al
+    reves de lo que uno esperaria por el nombre del campo. Por eso
+    comparamos contra reservation_date, no contra entry_time.
+
     Devuelve el dict de la reserva si la encuentra, o None."""
     fecha_str = fecha.strftime("%Y-%m-%d")
 
@@ -172,12 +179,11 @@ def buscar_reserva_confirmada(auth_headers, fecha):
         return None
 
     for reserva in data.get("reservations", []):
-        entry_time = reserva.get("entry_time", "")
-        entry_fecha = entry_time[:10]  # "YYYY-MM-DD"
+        reservation_date = reserva.get("reservation_date", "")
         vehicle_id = reserva.get("vehicle", {}).get("id")
         estado = reserva.get("status")
 
-        if entry_fecha == fecha_str and vehicle_id == VEHICLE_ID and estado == "APPROVED":
+        if reservation_date == fecha_str and vehicle_id == VEHICLE_ID and estado == "APPROVED":
             return reserva
 
     return None
