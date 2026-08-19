@@ -5,9 +5,8 @@ Automatiza la reserva de parqueo en Corporate Experience.
 Logica:
 - Las reservas se habilitan cada dia a las 6am, un dia a la vez, para la
   fecha que cae exactamente 7 dias despues.
-- Este script arranca a las 5:55am (disparado por cron-job.org via la
-  API de GitHub) y REINTENTA cada cierto tiempo hasta las 6:05am (10
-  minutos de ventana).
+- Este script arranca a las 5:52am (disparado por cron-job.org via la
+  API de GitHub) y REINTENTA cada cierto tiempo.
 - Cada intento:
     1. Verifica si YA existe una reserva APROBADA para la fecha
        objetivo (chequeando /api/reservations). Si ya existe, termina
