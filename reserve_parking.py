@@ -24,7 +24,7 @@ Logica:
     a) se confirme una reserva real, o
     b) ya no quede cupo en NINGUN parking lot preferido, o
     c) se acabe la ventana de tiempo de reintentos.
-- Si la fecha que se habilita (hoy + 7 dias) no es jueves/viernes, no
+- Si la fecha que se habilita (hoy + 7 dias) no es un dia deseado, no
   hace nada.
 
 Credenciales: se leen de variables de entorno (nunca quedan en este
@@ -51,7 +51,7 @@ RESERVATIONS_URL = f"{BASE_URL}/reservations"
 
 # Dias de la semana en los que queres reservar (0=lunes ... 6=domingo)
 # 3 = jueves, 4 = viernes
-DIAS_DESEADOS = {3, 4}
+DIAS_DESEADOS = {2, 3}
 
 # Parking lots preferidos, EN ORDEN DE PRIORIDAD.
 PRIORITY_LOT_IDS = [2, 10, 9]
