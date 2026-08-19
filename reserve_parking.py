@@ -65,8 +65,8 @@ HORA_ENTRADA_CORTA = "08:00"    # mismo valor pero formato HH:MM
 DIAS_ANTICIPACION = 7
 
 # --- Configuracion de reintentos ---
-MINUTOS_MAX_REINTENTO = 10
-SEGUNDOS_ENTRE_INTENTOS = 15   # espera cuando NO hay cupo en ningun lot
+MINUTOS_MAX_REINTENTO = 1
+SEGUNDOS_ENTRE_INTENTOS = 30   # espera cuando NO hay cupo en ningun lot
 SEGUNDOS_ESPERA_CONFIRMACION = 5  # espera despues del POST antes de verificar
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
@@ -249,9 +249,12 @@ def intentar_reservar_con_reintentos(auth_headers, fecha_objetivo):
         lot_elegido = elegir_lot_disponible(disponibilidad) if disponibilidad else None
 
         if lot_elegido is None:
-            log.info("Sin cupo en ningun lot preferido por ahora. Reintentando...")
-            time.sleep(SEGUNDOS_ENTRE_INTENTOS)
-            continue
+            log.warning(
+                "Sin cupo disponible en ningun lot preferido "
+                f"{PRIORITY_LOT_IDS}. No tiene sentido seguir reintentando "
+                "ahora mismo, se detiene el script."
+            )
+            return False
 
         # 2. Intentar reservar
         try:
