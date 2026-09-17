@@ -53,7 +53,7 @@ RESERVATIONS_URL = f"{BASE_URL}/reservations"
 DIAS_DESEADOS = {2, 3}
 
 # Parking lots preferidos, EN ORDEN DE PRIORIDAD.
-PRIORITY_LOT_IDS = [10, 9]
+PRIORITY_LOT_IDS = [10, 9, 8]
 
 VEHICLE_ID = 16597
 REASON = "Jornada Laboral"
@@ -66,7 +66,7 @@ DIAS_ANTICIPACION = 7
 # --- Configuracion de reintentos ---
 MINUTOS_MAX_REINTENTO = 2
 SEGUNDOS_ENTRE_INTENTOS = 15   # espera cuando NO hay cupo en ningun lot
-SEGUNDOS_ESPERA_CONFIRMACION = 30  # espera despues del POST antes de verificar
+SEGUNDOS_ESPERA_CONFIRMACION = 15  # espera despues del POST antes de verificar
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
 
