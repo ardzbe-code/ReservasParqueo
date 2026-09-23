@@ -50,7 +50,7 @@ RESERVATIONS_URL = f"{BASE_URL}/reservations"
 
 # Dias de la semana en los que queres reservar (0=lunes ... 6=domingo)
 # 3 = jueves, 4 = viernes
-DIAS_DESEADOS = {2, 3}
+DIAS_DESEADOS = {4}
 
 # Parking lots preferidos, EN ORDEN DE PRIORIDAD.
 PRIORITY_LOT_IDS = [10, 9, 8]
