@@ -80,6 +80,15 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+BROWSER_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Origin": "https://app.corporateexperience.parso.co",
+    "Referer": "https://app.corporateexperience.parso.co/",
+}
 
 # ---------------------------------------------------------------------------
 # Funciones
@@ -93,8 +102,15 @@ def login():
         log.error("Faltan las variables de entorno CORP_EMAIL y/o CORP_PASSWORD.")
         sys.exit(1)
 
-    resp = requests.post(LOGIN_URL, json={"email": email, "password": password})
-    resp.raise_for_status()
+    resp = requests.post(
+        LOGIN_URL,
+        json={"email": email, "password": password},
+        headers=BROWSER_HEADERS,
+    )
+
+    if not resp.ok:
+        log.error(f"Login falló. Status: {resp.status_code}. Cuerpo: {resp.text[:500]}")
+        sys.exit(1)
 
     auth_headers = extraer_tokens(resp)
     log.info("Login exitoso.")
