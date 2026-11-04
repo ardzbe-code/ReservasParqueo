@@ -21,8 +21,11 @@ Logica:
        trata como fallo y se reintenta.
 - Sigue reintentando hasta que:
     a) se confirme una reserva real, o
-    b) ya no quede cupo en NINGUN parking lot preferido, o
+    b) ya no quede cupo en NINGUN parking lot preferido (la API
+       respondio y todos los lots tienen 0), o
     c) se acabe la ventana de tiempo de reintentos.
+- Si falla la CONSULTA de disponibilidad (error de red, 403, etc.) NO se
+  interpreta como "sin cupo": se espera y se reintenta.
 - Si la fecha que se habilita (hoy + 7 dias) no es un dia deseado, no
   hace nada.
 
@@ -49,8 +52,8 @@ AVAILABILITY_URL = f"{BASE_URL}/parking_spaces/availability"
 RESERVATIONS_URL = f"{BASE_URL}/reservations"
 
 # Dias de la semana en los que queres reservar (0=lunes ... 6=domingo)
-# 3 = jueves, 4 = viernes
-DIAS_DESEADOS = {2,4}
+# 2 = miercoles, 3 = jueves, 4 = viernes
+DIAS_DESEADOS = {2, 4}
 
 # Parking lots preferidos, EN ORDEN DE PRIORIDAD.
 PRIORITY_LOT_IDS = [10, 9, 8]
@@ -65,7 +68,7 @@ DIAS_ANTICIPACION = 7
 
 # --- Configuracion de reintentos ---
 MINUTOS_MAX_REINTENTO = 2
-SEGUNDOS_ENTRE_INTENTOS = 15   # espera cuando NO hay cupo en ningun lot
+SEGUNDOS_ENTRE_INTENTOS = 15       # espera cuando hay un error de red/HTTP
 SEGUNDOS_ESPERA_CONFIRMACION = 15  # espera despues del POST antes de verificar
 
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "reserve_parking.log")
@@ -80,6 +83,9 @@ logging.basicConfig(
 )
 log = logging.getLogger(__name__)
 
+# Headers de navegador: la API esta detras de Cloudflare y bloquea el
+# User-Agent por defecto de Python (403). Viajan en TODAS las peticiones
+# porque se mezclan dentro de auth_headers en login().
 BROWSER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -112,7 +118,8 @@ def login():
         log.error(f"Login falló. Status: {resp.status_code}. Cuerpo: {resp.text[:500]}")
         sys.exit(1)
 
-    auth_headers = extraer_tokens(resp)
+    # Headers de navegador + tokens de sesion, para todas las peticiones
+    auth_headers = {**BROWSER_HEADERS, **extraer_tokens(resp)}
     log.info("Login exitoso.")
     return auth_headers
 
@@ -264,8 +271,10 @@ def intentar_reservar_con_reintentos(auth_headers, fecha_objetivo):
         try:
             disponibilidad = consultar_disponibilidad(auth_headers, fecha_objetivo)
         except requests.RequestException as e:
+            # Un error al CONSULTAR no es "sin cupo": se espera y se reintenta.
             log.warning(f"Error consultando disponibilidad: {e}")
-            disponibilidad = []
+            time.sleep(SEGUNDOS_ENTRE_INTENTOS)
+            continue
 
         lot_elegido = elegir_lot_disponible(disponibilidad) if disponibilidad else None
 
@@ -323,8 +332,8 @@ def main():
 
     if dia_semana not in DIAS_DESEADOS:
         log.info(
-            f"La fecha que se habilita hoy ({fecha_objetivo}) no es "
-            f"jueves/viernes (dia {dia_semana}). No se hace nada."
+            f"La fecha que se habilita hoy ({fecha_objetivo}) no es un "
+            f"dia deseado (dia {dia_semana}). No se hace nada."
         )
         return
 
